@@ -51,7 +51,7 @@ Hooks (`useState`, `useEffect`, …) are called inside the component body
 
 ## Design Principles
 
-Two rules come before any implementation decision:
+Three rules come before any implementation decision:
 
 1. **Simplicity is the top priority.** When choosing between alternatives,
    pick the one with the lowest cognitive complexity for a person reading
@@ -62,6 +62,12 @@ Two rules come before any implementation decision:
    to change. If you cannot describe what it does in one sentence, split
    it: hoist state into a parent, delegate arrangement to `Row`/`Column`,
    and extract pure rendering into its own component.
+
+3. **The public API must be declarative.** Whoever uses a component should
+   express *what* they want, not *how* to implement it. Prefer props that
+   describe intent (`value`, `label`, `on_change`) over callbacks that
+   dictate mechanics; hide rendering, timing, and cleanup details inside
+   the component.
 
 ---
 
