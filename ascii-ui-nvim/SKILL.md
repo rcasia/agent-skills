@@ -49,6 +49,22 @@ Hooks (`useState`, `useEffect`, …) are called inside the component body
 
 ---
 
+## Design Principles
+
+Two rules come before any implementation decision:
+
+1. **Simplicity is the top priority.** When choosing between alternatives,
+   pick the one with the lowest cognitive complexity for a person reading
+   the code for the first time — clear over clever.
+
+2. **One responsibility per component.** A component must not mix
+   presentation, state, and layout at once. It should have a single reason
+   to change. If you cannot describe what it does in one sentence, split
+   it: hoist state into a parent, delegate arrangement to `Row`/`Column`,
+   and extract pure rendering into its own component.
+
+---
+
 ## Quick Start
 
 ```lua
