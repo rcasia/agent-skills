@@ -18,7 +18,7 @@ hooks, best practices, and common patterns for plugin authors.
 - Asking how to use `useState`, `useInterval`, `ui.mount`, or any ascii-ui API
 
 **Contents:**
-- `SKILL.md` — mental model, quick start, best practices, anti-patterns
+- `SKILL.md` — context, design rules, change workflow, final checklist
 - `components.md` — built-in components, layout (`Row`/`Column`), Color API, low-level blocks
 - `hooks.md` — hook reference with gotchas and dependency semantics
 - `patterns.md` — 13 recipes (clock, lists, conditional rendering, lifted state, useReducer, colored rows, Color API, layered architecture, autocmd cleanup, layouts, stdout, component testing, live reload)
@@ -43,7 +43,7 @@ metadata:
 
 To update: diff `lua/ascii-ui/` and `docs/` in [ascii-ui.nvim](https://github.com/ascii-ui/ascii-ui.nvim)
 since `source_commit`, revise the reference files, then bump `source_commit`
-and `skill_synced` in the same commit. See "Sync Status" in `SKILL.md` for
+and `skill_synced` in the same commit. See "Staying current" in `SKILL.md` for
 the exact commands.
 
 ## Installation

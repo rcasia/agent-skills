@@ -3,9 +3,10 @@ name: ascii-ui-nvim
 description: >
   Building Neovim plugin UIs with ascii-ui.nvim — use when writing a Neovim
   plugin that needs a floating window UI, interactive components, or animated
-  terminal output. Covers the component model, hooks, layout, testing, and
-  common patterns. Load when the user mentions ascii-ui, asks how to build a
-  Neovim UI, or is writing a plugin that mounts a floating window.
+  terminal output. Organized as context, design rules, a change workflow, and
+  a final checklist, with deep references for components, hooks, and patterns.
+  Load when the user mentions ascii-ui, asks how to build a Neovim UI, or is
+  writing a plugin that mounts a floating window.
 metadata:
   source_repo: https://github.com/ascii-ui/ascii-ui.nvim
   source_commit: a88bbb033eeb70e058454797cb96ddf6f15aa611
@@ -15,22 +16,34 @@ metadata:
 
 # ascii-ui.nvim
 
-Plugin UI framework for Neovim with a React-inspired component model.
-Components are pure Lua functions that return renderable lines. The framework
-diffs and re-renders only what changed.
+A skill for building Neovim plugin UIs with
+[ascii-ui.nvim](https://github.com/ascii-ui/ascii-ui.nvim), a React-inspired
+UI framework. It is organized in four parts:
+
+```
+1. Context   → what ascii-ui is and the building blocks
+2. Rules     → design principles and coding rules that never bend
+3. Workflow  → the steps to approach any change
+4. Checklist → simple yes/no questions to close the change
+```
 
 **Docs:** https://ascii-ui.github.io/ascii-ui-docs/
 **Repo:** https://github.com/ascii-ui/ascii-ui.nvim
 
-## When to Load This Skill
+---
+
+## 1. Context
+
+### When to use this skill
 
 - User is building a Neovim plugin that needs a UI
 - User mentions `ascii-ui`, `ascii-ui.nvim`, or `ui.mount`
 - User wants interactive widgets (buttons, inputs, sliders) in Neovim
 - User asks how to animate or update a floating window at runtime
-- User asks about components, hooks, `useState`, or `useInterval` in a Neovim context
+- User asks about components, hooks, `useState`, or `useInterval` in a
+  Neovim context
 
-## Mental Model
+### Mental model
 
 ascii-ui is **not** a DOM — it is a **line-oriented** renderer. A component
 returns a flat table of `BufferLine` objects (rows). Each `BufferLine` is a
@@ -47,9 +60,81 @@ App (component)
 Hooks (`useState`, `useEffect`, …) are called inside the component body
 **in the same order on every render** — identical rule to React.
 
+### Quick Start
+
+```lua
+local ui = require("ascii-ui")
+local Paragraph = ui.components.Paragraph
+local Button    = ui.components.Button
+local useState  = ui.hooks.useState
+
+local App = ui.createComponent("App", function()
+  local count, setCount = useState(0)
+
+  return {
+    Paragraph({ content = "Count: " .. count }),
+    Button({
+      label    = "Increment",
+      on_press = function() setCount(count + 1) end,
+    }),
+  }
+end)
+
+ui.mount(App)
+```
+
+Install (lazy.nvim):
+
+```lua
+{ "ascii-ui/ascii-ui.nvim", opts = {} }
+```
+
+Also available on LuaRocks (`luarocks install ascii-ui`) and lux
+(`lux install ascii-ui`).
+
+### Key Building Blocks
+
+| Concept | What it is |
+|---|---|
+| `ui.createComponent(name, fn)` | Registers a component; `fn` is the render function |
+| `ui.mount(App)` | Opens a floating window and starts the event loop |
+| `BufferLine` | One rendered row — a horizontal list of `Segment`s |
+| `Segment` | Smallest unit: a string with optional color / highlight |
+| `Segment:wrap()` | Shorthand — wraps a lone segment in a `BufferLine` |
+| Hooks | `useState`, `useEffect`, `useReducer`, `useConfig`, `useInterval`, `useTimeout` |
+| `ui.map(items, fn)` | Safe list rendering — returns a flat array of nodes |
+| `ui.layout.Row` / `ui.layout.Column` | Side-by-side / stacked child layout |
+| `ui.Color` | Unified truecolor API (hex, `{fg,bg}` tables, HSL) |
+| `ui.viewports.StdoutViewport` | Render to terminal stdout instead of a window |
+| `ui.debug(file)` | Live-reload development: mount a file, reload on save |
+| `require("ascii-ui.testing")` | Component test harness (render → query → interact) |
+
+### Deep references
+
+- [components.md](components.md) — built-in component props and examples
+- [hooks.md](hooks.md) — hook signatures, return values, and gotchas
+- [patterns.md](patterns.md) — full recipes for common UI patterns
+
+### Staying current
+
+This skill mirrors upstream commit `a88bbb0` (2026-08-14) — recorded in
+`metadata.source_commit` in the frontmatter. To update it, diff upstream
+since that commit and revise the reference files:
+
+```sh
+cd path/to/ascii-ui.nvim
+git fetch origin
+git log --oneline a88bbb0..HEAD -- lua/ascii-ui docs/ README.md
+git diff a88bbb0..HEAD -- lua/ascii-ui/init.lua lua/ascii-ui/components lua/ascii-ui/hooks
+```
+
+After editing, bump `metadata.source_commit` and `metadata.skill_synced`.
+
 ---
 
-## Design Principles
+## 2. Rules
+
+### Design principles
 
 Seven rules come before any implementation decision:
 
@@ -95,71 +180,13 @@ Seven rules come before any implementation decision:
    failed and why, and give the caller a way to handle it — don't hide
    failures behind bare `pcall`.
 
----
+### Coding rules
 
-## Quick Start
+The concrete habits that keep ascii-ui code correct.
 
-```lua
-local ui = require("ascii-ui")
-local Paragraph = ui.components.Paragraph
-local Button    = ui.components.Button
-local useState  = ui.hooks.useState
-
-local App = ui.createComponent("App", function()
-  local count, setCount = useState(0)
-
-  return {
-    Paragraph({ content = "Count: " .. count }),
-    Button({
-      label    = "Increment",
-      on_press = function() setCount(count + 1) end,
-    }),
-  }
-end)
-
-ui.mount(App)
-```
-
-Install (lazy.nvim):
-
-```lua
-{ "ascii-ui/ascii-ui.nvim", opts = {} }
-```
-
-Also available on LuaRocks (`luarocks install ascii-ui`) and lux
-(`lux install ascii-ui`).
-
----
-
-## Key Building Blocks
-
-| Concept | What it is |
-|---|---|
-| `ui.createComponent(name, fn)` | Registers a component; `fn` is the render function |
-| `ui.mount(App)` | Opens a floating window and starts the event loop |
-| `BufferLine` | One rendered row — a horizontal list of `Segment`s |
-| `Segment` | Smallest unit: a string with optional color / highlight |
-| `Segment:wrap()` | Shorthand — wraps a lone segment in a `BufferLine` |
-| Hooks | `useState`, `useEffect`, `useReducer`, `useConfig`, `useInterval`, `useTimeout` |
-| `ui.map(items, fn)` | Safe list rendering — returns a flat array of nodes |
-| `ui.layout.Row` / `ui.layout.Column` | Side-by-side / stacked child layout |
-| `ui.Color` | Unified truecolor API (hex, `{fg,bg}` tables, HSL) |
-| `ui.viewports.StdoutViewport` | Render to terminal stdout instead of a window |
-| `ui.debug(file)` | Live-reload development: mount a file, reload on save |
-| `require("ascii-ui.testing")` | Component test harness (render → query → interact) |
-
-See [components.md](components.md) for all built-in components.
-See [hooks.md](hooks.md) for all hooks with gotchas.
-See [patterns.md](patterns.md) for recipes and best practices.
-
----
-
-## Best Practices
-
-### 1. Keep component bodies pure
-
-No Neovim API calls (`vim.api.*`, `vim.cmd`, `vim.fn.*`) during render.
-They belong in `useEffect` or event callbacks.
+**1. Keep component bodies pure.** No Neovim API calls (`vim.api.*`,
+`vim.cmd`, `vim.fn.*`) during render. They belong in `useEffect` or event
+callbacks.
 
 ```lua
 -- WRONG: side effect in render body
@@ -177,36 +204,13 @@ local App = ui.createComponent("App", function()
 end)
 ```
 
-### 2. Return a flat table — never nested arrays
-
-The return value must be `BufferLine[]` or `FiberNode[]`. Nested tables of
-tables confuse the reconciler.
+**2. Return a flat table — never nested arrays.** The return value must be
+`BufferLine[]` or `FiberNode[]`. Nested tables of tables confuse the
+reconciler. When you have a dynamic sub-list, flatten it with `ui.map`.
 
 ```lua
 -- WRONG
 return { { Paragraph({ content = "a" }), Paragraph({ content = "b" }) } }
-
--- RIGHT
-return {
-  Paragraph({ content = "a" }),
-  Paragraph({ content = "b" }),
-}
-```
-
-When you have a dynamic sub-list, flatten it with `ui.map` or
-`vim.list_extend`.
-
-### 3. Use `ui.map` for lists, not manual loops
-
-`ui.map` returns a flat array and reads like intent.
-
-```lua
--- WRONG: manual loop silently nests the result
-local rows = {}
-for _, item in ipairs(items) do
-  table.insert(rows, Paragraph({ content = item }))
-end
-return { rows }   -- oops — nested
 
 -- RIGHT
 return {
@@ -216,102 +220,51 @@ return {
 }
 ```
 
-### 4. Conditional rendering with plain `if/else`
-
-Assign to a local variable, include the variable in the return table.
-
-```lua
-local App = ui.createComponent("App", function()
-  local visible, setVisible = useState(true)
-
-  local body
-  if visible then
-    body = Paragraph({ content = "Visible!" })
-  else
-    body = Paragraph({ content = "(hidden)" })
-  end
-
-  return {
-    body,
-    Button({ label = "Toggle", on_press = function() setVisible(not visible) end }),
-  }
-end)
-```
-
-Do **not** use `and`/`or` short-circuit tricks — they return the wrong type
-when the condition is false.
-
-### 5. Lift state up when siblings share data
-
-If two components need the same value, own the state in their parent and pass
-it as props.
+**3. Conditional rendering with plain `if/else`.** Assign to a local
+variable, include the variable in the return table. Do **not** use
+`and`/`or` short-circuit tricks — they return the wrong type when the
+condition is false.
 
 ```lua
-local Parent = ui.createComponent("Parent", function()
-  local query, setQuery = useState("")
-
-  return {
-    Input({ value = query, on_change = setQuery }),
-    ResultsList({ query = query }),
-  }
-end)
+local body
+if visible then
+  body = Paragraph({ content = "Visible!" })
+else
+  body = Paragraph({ content = "(hidden)" })
+end
+return { body }
 ```
 
-### 6. Prefer `useReducer` over multiple related `useState` calls
+**4. Lift state up when siblings share data.** If two components need the
+same value, own the state in their parent and pass it as props.
 
-When state transitions are coupled (e.g. a list with an active index), group
+**5. Prefer `useReducer` over multiple related `useState` calls.** When
+state transitions are coupled (e.g. a list with an active index), group
 them in a reducer — it prevents stale-closure bugs and makes transitions
 explicit.
 
-```lua
--- Prefer this for related state
-local state, dispatch = useReducer(function(s, action)
-  if action.type == "select" then
-    return { items = s.items, selected = action.index }
-  end
-  if action.type == "add" then
-    return { items = vim.list_extend({}, s.items, { action.item }), selected = s.selected }
-  end
-  return s
-end, { items = {}, selected = 1 })
-```
+**6. Use the functional setter inside closures.** Callbacks capture state
+at render time. Read fresh values with `setCount(function(prev) ... end)`.
 
-### 7. Color: hex strings, `{fg, bg}` tables, or `ui.Color`
-
-A segment's `color` accepts a plain hex string (`"#ff6b6b"`), a table
-(`{ fg = "...", bg = "..." }`), or a `ui.Color` instance. Use colors for
-hardcoded brand values; `highlight = "DiagnosticError"` defers to the user's
-colorscheme — prefer it for semantic colors.
+**7. Color: hex strings, `{fg, bg}` tables, or `ui.Color`.** For
+hardcoded brand values; `highlight = "DiagnosticError"` defers to the
+user's colorscheme — prefer it for semantic colors.
 
 ```lua
--- hex shorthand (foreground)
 Segment:new({ content = "●", color = "#ff6b6b" }):wrap()
-
--- fg + bg
 Segment:new({ content = " OK ", color = { fg = "#000000", bg = "#4caf50" } }):wrap()
-
--- Color API: HSL, lighten/darken/complement
-local accent = ui.Color.from_hsl(174, 72, 56)
-Segment:new({ content = "●", color = accent:lighten(0.1) }):wrap()
-
--- theme-aware
 Segment:new({ content = "✖ error", highlight = "DiagnosticError" }):wrap()
 ```
 
-### 8. Separate data, logic, and rendering into layers
+**8. Separate data, logic, and rendering into layers.** For non-trivial
+UIs keep three layers — **data** (reads external state), **logic** (pure
+computation), **render** (values → `BufferLine[]`, no hooks) — with the
+component layer owning state on top. The pure layers are testable without
+mounting anything. See pattern 8 in [patterns.md](patterns.md).
 
-For non-trivial UIs (clocks, charts, boards) keep three distinct layers:
-- **data layer** — fetches / computes raw values (pure Lua, no ascii-ui)
-- **render layer** — converts values to `BufferLine[]` tables (pure, no hooks)
-- **component layer** — owns state and hooks, calls the render layer
-
-This makes the render logic independently testable — see the testing pattern
-in [patterns.md](patterns.md) (`ui.testing.render`).
-
-### 9. Clean up timers and effects explicitly
-
-`useInterval` and `useTimeout` clean up their timers automatically on unmount
-and when `delay` changes. For manual `useEffect` timers, return the cleanup
+**9. Clean up timers and effects explicitly.** `useInterval` and
+`useTimeout` tear down their timers automatically on unmount and when
+`delay` changes. For manual `useEffect` resources, return the cleanup
 function.
 
 ```lua
@@ -325,9 +278,7 @@ useEffect(function()
 end, {})
 ```
 
----
-
-## Anti-Patterns
+### Anti-patterns
 
 | Anti-pattern | Why it breaks | Fix |
 |---|---|---|
@@ -342,28 +293,68 @@ end, {})
 
 ---
 
-## Reference Files
+## 3. Workflow — approaching a change
 
-- [components.md](components.md) — built-in component props and examples
-- [hooks.md](hooks.md) — hook signatures, return values, and gotchas
-- [patterns.md](patterns.md) — full recipes for common UI patterns
+The order to do things in, for any feature or fix:
+
+1. **Frame it in one sentence.** "This component renders X and changes
+   when Y." If the sentence needs "and", split the component (Rule 2).
+
+2. **Write the pure layers first.** Data + logic + render as plain Lua
+   functions — values in, `BufferLine[]` out. No ascii-ui state yet.
+   (Coding rule 8; pattern 8 in patterns.md.)
+
+3. **Pick building blocks.** Built-in components before custom ones;
+   `Row`/`Column` for arrangement; raw `Segment`/`BufferLine` only when
+   nothing fits. Check components.md for the exact props.
+
+4. **Decide state ownership.** One owner per value. Shared state lives in
+   the parent; coupled transitions go in a single `useReducer`.
+
+5. **Write the component body.** Hooks at top level in stable order,
+   flat return table, `ui.map` for lists, plain `if/else` for branches,
+   fresh segments each render (coding rules 1–3, 6).
+
+6. **Wire interactivity and effects.** `on_press` / `on_change` callbacks;
+   `useInterval` / `useTimeout` for time; autocmds and subscriptions in
+   `useEffect` **with cleanup** (coding rule 9).
+
+7. **Iterate live.** Develop with `require("ascii-ui").debug("file.lua")`
+   — save and the window re-mounts; errors show as notifications.
+
+8. **Verify.** Run the checklist below. Test the pure layers directly;
+   test component behavior with `require("ascii-ui.testing").render(...)`
+   (pattern 12 in patterns.md).
 
 ---
 
-## Sync Status
+## 4. Final checklist
 
-This skill mirrors `ascii-ui/ascii-ui.nvim`. It was last synced at commit
-`a88bbb0` (2026-08-14) — recorded in `metadata.source_commit` in the
-frontmatter above.
+Answer every question yes/no before calling the change done. A "no" sends
+you back to the workflow step that owns it.
 
-To update this skill, diff the upstream source since that commit and revise
-the reference files:
+**Design (rules 1–6):**
+- [ ] Can I describe each component's responsibility in one sentence?
+- [ ] Would a first-time reader understand each component in two minutes?
+- [ ] Does the public API say *what* the caller wants, not *how* it works?
+- [ ] Did any flag/variant props appear that should be separate pieces?
+- [ ] Could any component be reused elsewhere — or did it assume a fixed
+      parent, size, or position?
 
-```sh
-cd path/to/ascii-ui.nvim
-git fetch origin
-git log --oneline a88bbb0..HEAD -- lua/ascii-ui docs/ README.md
-git diff a88bbb0..HEAD -- lua/ascii-ui/init.lua lua/ascii-ui/components lua/ascii-ui/hooks
-```
+**Code (coding rules):**
+- [ ] No `vim.api` / `vim.cmd` / timers in any render body?
+- [ ] Every component returns a flat `BufferLine[]` / `FiberNode[]`?
+- [ ] Hooks unconditional, same order every render?
+- [ ] Closures that read state use the functional setter?
+- [ ] Every effect that allocates a resource returns a cleanup?
+- [ ] Fresh `Segment` instances each render (none shared across renders)?
 
-After editing, bump `metadata.source_commit` and `metadata.skill_synced`.
+**Robustness (rule 7):**
+- [ ] Failures raise with a clear message — no bare `pcall` swallowing
+      errors?
+- [ ] Prop types declared where validation matters?
+
+**Verification (workflow step 8):**
+- [ ] Pure layers tested with plain assertions?
+- [ ] Interactive behavior tested with `ui.testing.render`?
+- [ ] Mounted once via `ui.debug`: renders, responds, quits cleanly?
