@@ -51,7 +51,7 @@ Hooks (`useState`, `useEffect`, …) are called inside the component body
 
 ## Design Principles
 
-Five rules come before any implementation decision:
+Seven rules come before any implementation decision:
 
 1. **Simplicity is the top priority.** When choosing between alternatives,
    pick the one with the lowest cognitive complexity for a person reading
@@ -63,11 +63,11 @@ Five rules come before any implementation decision:
    it: hoist state into a parent, delegate arrangement to `Row`/`Column`,
    and extract pure rendering into its own component.
 
-3. **The public API must be declarative.** Whoever uses a component should
-   express *what* they want, not *how* to implement it. Prefer props that
-   describe intent (`value`, `label`, `on_change`) over callbacks that
-   dictate mechanics; hide rendering, timing, and cleanup details inside
-   the component.
+3. **The public API must be declarative — designed for whoever uses it.**
+   Whoever uses a component should express *what* they want, not *how* to
+   implement it. Prefer props that describe intent (`value`, `label`,
+   `on_change`) over callbacks that dictate mechanics; hide rendering,
+   timing, and cleanup details inside the component.
 
 4. **A component must be understandable in under two minutes.** If a
    first-time reader cannot grasp what it renders and when it re-renders
@@ -81,6 +81,19 @@ Five rules come before any implementation decision:
    `Row`/`Column` for arrangement, `Tree` children for embedded nodes,
    children props for slots. A new use case should mean a new combination,
    not a new prop.
+
+6. **Prefer composability.** Design every piece so it fits inside any
+   other: components accept and return the standard types
+   (`FiberNode[]` / `BufferLine[]`), take `children` instead of hard-coding
+   content, and never assume a fixed size, position, or parent. A component
+   that only works in one place is a design smell.
+
+7. **Errors must be explicit and handleable — never silent.** Failures are
+   surfaced, not swallowed: invalid props raise at call time, and render
+   errors report the component-tree path and reason instead of quietly
+   rendering nothing. In your own code, fail with a message that says what
+   failed and why, and give the caller a way to handle it — don't hide
+   failures behind bare `pcall`.
 
 ---
 
