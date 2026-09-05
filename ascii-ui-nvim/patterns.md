@@ -26,7 +26,7 @@ local Clock = ui.createComponent("Clock", function()
   end, 1000)
 
   return {
-    Segment:new({ content = time, color = { fg = "#4ecdc4" } }):wrap(),
+    Segment:new({ content = time, color = "#4ecdc4" }):wrap(),
   }
 end)
 ```
@@ -118,7 +118,7 @@ When two sibling components need the same value, own the state in their common
 parent and pass it down as props.
 
 ```lua
--- SearchInput is a child that fires onChange
+-- SearchInput is a child that fires on_change
 local SearchInput = ui.createComponent("SearchInput", function(props)
   return {
     Input({
@@ -207,8 +207,9 @@ end)
 
 ## Pattern 6 — Custom colored row (low-level Segment + BufferLine)
 
-When you need a row where each character or word has a different color, build
-it manually with `Segment` and `BufferLine`.
+When you need a row where each word has a different color, build it manually
+with `Segment` and `BufferLine`. Colors accept a hex string, a `{fg, bg}`
+table, or a `ui.Color` instance.
 
 ```lua
 local BufferLine = require("ascii-ui.buffer.bufferline")
@@ -223,9 +224,9 @@ local function make_statusbar(mode, filename, col, line)
   }
 
   return BufferLine.new(
-    Segment:new({ content = "[" .. mode .. "]", color = { fg = mode_colors[mode] or "#ffffff" } }),
+    Segment:new({ content = "[" .. mode .. "]", color = mode_colors[mode] or "#ffffff" }),
     Segment:new({ content = " " .. filename .. "  " }),
-    Segment:new({ content = "col:" .. col .. " line:" .. line, color = { fg = "#8b949e" } })
+    Segment:new({ content = "col:" .. col .. " line:" .. line, color = "#8b949e" })
   )
 end
 
@@ -236,7 +237,36 @@ end)
 
 ---
 
-## Pattern 7 — Layered architecture for complex UIs
+## Pattern 7 — Animated / computed colors with the Color API
+
+`ui.Color` derives palettes and shades at runtime — ideal for charts, heat
+maps, and smooth animations without hand-picking hex values.
+
+```lua
+local ui = require("ascii-ui")
+
+local base = ui.Color.from_hsl(174, 72, 56)        -- teal
+
+base:lighten(0.2)     -- brighter variant
+base:darken(0.2)      -- shadow variant
+base:complement()     -- opposite hue
+base:saturate(0.1)
+
+-- A bar chart whose bars tint from dark (low) to light (high):
+local function bar(value, max)
+  local shade = base:lighten(value / max * 0.3)
+  return ui.blocks.Segment({
+    content = ("▮"):rep(math.floor(value / max * 10)),
+    color = shade,
+  }):wrap()
+end
+```
+
+Colors are cached: identical `(fg, bg)` pairs return the same instance.
+
+---
+
+## Pattern 8 — Layered architecture for complex UIs
 
 For UIs with real logic (clocks, charts, file trees), separate concerns into
 four layers. Each layer can be tested independently.
@@ -298,7 +328,7 @@ unit tests for them with no Neovim instance needed.
 
 ---
 
-## Pattern 8 — useEffect with cleanup (autocmd, LSP, external resource)
+## Pattern 9 — useEffect with cleanup (autocmd, LSP, external resource)
 
 ```lua
 local useEffect = ui.hooks.useEffect
@@ -336,14 +366,56 @@ end)
 
 ---
 
-## Pattern 9 — Rendering to stdout (headless / script mode)
+## Pattern 10 — Side-by-side layouts with Row / Column
+
+Compose `Row` and `Column` for dashboards, forms, and sidebar + main
+layouts. `gap` spaces children without manual padding.
+
+```lua
+local ui       = require("ascii-ui")
+local Row      = ui.layout.Row
+local Column   = ui.layout.Column
+local Box      = require("ascii-ui.components.box")
+local Paragraph = ui.components.Paragraph
+local Slider   = ui.components.Slider
+local useState = ui.hooks.useState
+
+local Dashboard = ui.createComponent("Dashboard", function()
+  local volume, setVolume = useState(50)
+
+  return {
+    Paragraph({ content = "=== Dashboard ===" }),
+    Row({
+      children = {
+        Column(
+          Box({ width = 20, content = "CPU: 45%" }),
+          Box({ width = 20, content = "RAM: 62%" })
+        ),
+        Column(
+          Slider({ title = "Volume", value = volume, on_change = setVolume })
+        ),
+      },
+      gap = 4,
+    }),
+  }
+end)
+```
+
+Rules of thumb:
+- `Row` is top-aligned: rows of different height start at the same line.
+- `Column` is left-aligned.
+- Nest freely; for dynamic child lists use `ui.map` as `children`.
+
+---
+
+## Pattern 11 — Rendering to stdout (headless / script mode)
 
 Use `StdoutViewport` to render a UI to the terminal instead of a floating
 window. Useful for CLI scripts, CI output, or animated terminal art.
 
 ```lua
-local ui       = require("ascii-ui")
-local Stdout   = ui.viewports.StdoutViewport
+local ui     = require("ascii-ui")
+local Stdout = ui.viewports.StdoutViewport
 
 local App = ui.createComponent("App", function()
   return {
@@ -357,6 +429,91 @@ ui.mount(App, Stdout.new())
 ANSI truecolor codes are emitted automatically for any `color` fields on
 `Segment` objects. The output resets color after each colored segment.
 
+For tests or piped output, inject a custom writer:
+
+```lua
+local lines = {}
+local viewport = Stdout.new(function(s) table.insert(lines, s) end)
+ui.mount(App, viewport)
+```
+
+---
+
+## Pattern 12 — Component testing with `ui.testing`
+
+ascii-ui ships a React Testing Library-style harness. `render()` mounts a
+component into an in-memory screen — no window, no Neovim UI — and you query
+and interact with it by visible text.
+
+```lua
+-- tests/unit/components/counter_spec.lua
+pcall(require, "luacov")
+
+local ui      = require("ascii-ui")
+local testing = require("ascii-ui.testing")
+
+describe("Counter", function()
+  it("increments on button press", function()
+    local screen = testing.render(Counter)          -- no window opened
+
+    assert.is_true(screen:hasText("Count: 0"))
+    screen:select("+1")                              -- dispatch SELECT on the label
+    assert.is_true(screen:hasText("Count: 1"))
+  end)
+
+  it("renders the expected frame", function()
+    local screen = testing.render(Counter)
+    assert.are.same({ "Count: 0", "[ +1 ]" }, screen:toLines())
+  end)
+end)
+```
+
+`screen` query / interaction API:
+
+| Method | Purpose |
+|---|---|
+| `getByText(t)` / `getAllByText(t)` / `queryByText(t)` | Find segments by content |
+| `hasText(t)` / `hasLine(l)` / `hasLines(ls)` | Assertions on rendered output |
+| `hasHighlight(hl)` / `getByHighlight(hl)` | Assert highlight groups |
+| `getFocusable()` / `getAllFocusable()` / `hasFocusable(t)` | Focus queries |
+| `select(t)` | Fire `SELECT` on the segment with text `t` |
+| `focus(t)` | Move focus to segment `t` |
+| `trigger(t, interaction)` | Fire any interaction type (`"CURSOR_MOVE_RIGHT"`, …) |
+| `toLines()` / `toSnapshot()` | Raw frame / snapshot string |
+
+For real input (keypresses, cursor position), use the e2e helper:
+`require("ascii-ui.testing.e2e").mount(Component)` with `screen:press("jj<CR>")`
+and `screen:waitForText(...)`; unmount with `screen:unmount()`.
+
+Keep pure render/logic layers separate (Pattern 8) so most tests don't even
+need the harness; use `testing.render` for component-level behavior.
+
+---
+
+## Pattern 13 — Live-reload development loop
+
+Iterate on a component without restarting Neovim: write the component in its
+own file returning `createComponent(...)`, then mount it in debug mode with
+an auto-reload watcher.
+
+```lua
+-- lua/myplugin/MyComp.lua
+local ui = require("ascii-ui")
+return ui.createComponent("MyComp", function()
+  -- ...
+end)
+```
+
+```lua
+-- from any Neovim session (or a debug.lua + `make debug` in the plugin repo)
+require("ascii-ui").debug("lua/myplugin/MyComp.lua")
+```
+
+Every save (`BufWritePost`) closes the current window and re-mounts the file.
+Load/mount errors surface as notifications instead of crashing the session.
+`ui.debug` accepts optional injected `loader` / `mounter` / `notifier` /
+`watcher` overrides (dependency injection) for custom setups and tests.
+
 ---
 
 ## Cheat Sheet
@@ -364,15 +521,26 @@ ANSI truecolor codes are emitted automatically for any `color` fields on
 | Task | How |
 |---|---|
 | Display text | `Paragraph({ content = "..." })` |
-| Colored text | `Segment:new({ content = "...", color = { fg = "#hex" } }):wrap()` |
+| Colored text | `Segment:new({ content = "...", color = "#hex" }):wrap()` |
+| fg + bg | `Segment:new({ content = "...", color = { fg = "#000", bg = "#fff" } }):wrap()` |
+| Computed colors | `ui.Color.from_hsl(h, s, l)`, `:lighten()`, `:complement()` |
 | Theme-aware color | `Segment:new({ content = "...", highlight = "ErrorMsg" }):wrap()` |
 | Click handler | `Button({ label = "x", on_press = fn })` |
 | List of items | `ui.map(items, function(item) return ... end)` |
+| Side-by-side | `Row(child1, child2)` / `Row({ children = ..., gap = 2 })` |
+| Stacked | `Column(child1, child2)` |
+| Boxed panel | `require("ascii-ui.components.box")({ width = 20, content = "hi" })` |
+| Collapsible tree | `require("ascii-ui.components.tree")({ tree = node })` |
+| Text field | `Input({ value = v, on_change = fn, on_submit = fn })` |
 | Toggle visibility | `local x = cond and ComponentA() or ComponentB()` |
 | Reactive value | `local v, setV = useState(init)` |
 | Run on mount | `useEffect(fn, {})` |
 | Run on change | `useEffect(fn, { dep })` |
 | Timer | `useInterval(fn, ms)` |
+| One-shot / auto-dismiss | `useTimeout(fn, ms)` (nil delay cancels) |
 | Complex state | `useReducer(reducer, init)` |
 | Two siblings share state | Lift state to parent; pass as props |
 | Read user config | `useConfig()` |
+| Headless render | `ui.mount(App, ui.viewports.StdoutViewport.new())` |
+| Test a component | `require("ascii-ui.testing").render(Comp)` |
+| Dev live-reload | `require("ascii-ui").debug("path/to/Comp.lua")` |

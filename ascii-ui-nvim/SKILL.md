@@ -3,9 +3,14 @@ name: ascii-ui-nvim
 description: >
   Building Neovim plugin UIs with ascii-ui.nvim — use when writing a Neovim
   plugin that needs a floating window UI, interactive components, or animated
-  terminal output. Covers the component model, hooks, best practices, and
+  terminal output. Covers the component model, hooks, layout, testing, and
   common patterns. Load when the user mentions ascii-ui, asks how to build a
   Neovim UI, or is writing a plugin that mounts a floating window.
+metadata:
+  source_repo: https://github.com/ascii-ui/ascii-ui.nvim
+  source_commit: a88bbb033eeb70e058454797cb96ddf6f15aa611
+  source_commit_date: "2026-08-14"
+  skill_synced: "2026-09-05"
 ---
 
 # ascii-ui.nvim
@@ -14,8 +19,8 @@ Plugin UI framework for Neovim with a React-inspired component model.
 Components are pure Lua functions that return renderable lines. The framework
 diffs and re-renders only what changed.
 
-**Docs:** https://rcasia.github.io/ascii-ui-docs/
-**Repo:** https://github.com/rcasia/ascii-ui.nvim
+**Docs:** https://ascii-ui.github.io/ascii-ui-docs/
+**Repo:** https://github.com/ascii-ui/ascii-ui.nvim
 
 ## When to Load This Skill
 
@@ -70,8 +75,11 @@ ui.mount(App)
 Install (lazy.nvim):
 
 ```lua
-{ "rcasia/ascii-ui.nvim", opts = {} }
+{ "ascii-ui/ascii-ui.nvim", opts = {} }
 ```
+
+Also available on LuaRocks (`luarocks install ascii-ui`) and lux
+(`lux install ascii-ui`).
 
 ---
 
@@ -84,8 +92,13 @@ Install (lazy.nvim):
 | `BufferLine` | One rendered row — a horizontal list of `Segment`s |
 | `Segment` | Smallest unit: a string with optional color / highlight |
 | `Segment:wrap()` | Shorthand — wraps a lone segment in a `BufferLine` |
-| Hooks | `useState`, `useEffect`, `useInterval`, `useReducer`, … |
+| Hooks | `useState`, `useEffect`, `useReducer`, `useConfig`, `useInterval`, `useTimeout` |
 | `ui.map(items, fn)` | Safe list rendering — returns a flat array of nodes |
+| `ui.layout.Row` / `ui.layout.Column` | Side-by-side / stacked child layout |
+| `ui.Color` | Unified truecolor API (hex, `{fg,bg}` tables, HSL) |
+| `ui.viewports.StdoutViewport` | Render to terminal stdout instead of a window |
+| `ui.debug(file)` | Live-reload development: mount a file, reload on save |
+| `require("ascii-ui.testing")` | Component test harness (render → query → interact) |
 
 See [components.md](components.md) for all built-in components.
 See [hooks.md](hooks.md) for all hooks with gotchas.
@@ -190,7 +203,7 @@ local Parent = ui.createComponent("Parent", function()
   local query, setQuery = useState("")
 
   return {
-    SearchInput({ value = query, on_change = setQuery }),
+    Input({ value = query, on_change = setQuery }),
     ResultsList({ query = query }),
   }
 end)
@@ -215,16 +228,23 @@ local state, dispatch = useReducer(function(s, action)
 end, { items = {}, selected = 1 })
 ```
 
-### 7. Color segments with `color`, use `highlight` for theme-aware groups
+### 7. Color: hex strings, `{fg, bg}` tables, or `ui.Color`
 
-`color = { fg = "#rrggbb", bg = "#rrggbb" }` on a `Segment` applies a
-truecolor hex directly. Use it for hardcoded brand colors.
-`highlight = "DiagnosticError"` defers to the user's colorscheme — prefer
-it for semantic colors.
+A segment's `color` accepts a plain hex string (`"#ff6b6b"`), a table
+(`{ fg = "...", bg = "..." }`), or a `ui.Color` instance. Use colors for
+hardcoded brand values; `highlight = "DiagnosticError"` defers to the user's
+colorscheme — prefer it for semantic colors.
 
 ```lua
--- hardcoded hex
-Segment:new({ content = "●", color = { fg = "#ff6b6b" } }):wrap()
+-- hex shorthand (foreground)
+Segment:new({ content = "●", color = "#ff6b6b" }):wrap()
+
+-- fg + bg
+Segment:new({ content = " OK ", color = { fg = "#000000", bg = "#4caf50" } }):wrap()
+
+-- Color API: HSL, lighten/darken/complement
+local accent = ui.Color.from_hsl(174, 72, 56)
+Segment:new({ content = "●", color = accent:lighten(0.1) }):wrap()
 
 -- theme-aware
 Segment:new({ content = "✖ error", highlight = "DiagnosticError" }):wrap()
@@ -237,12 +257,14 @@ For non-trivial UIs (clocks, charts, boards) keep three distinct layers:
 - **render layer** — converts values to `BufferLine[]` tables (pure, no hooks)
 - **component layer** — owns state and hooks, calls the render layer
 
-This makes the render logic independently testable without mounting a window.
+This makes the render logic independently testable — see the testing pattern
+in [patterns.md](patterns.md) (`ui.testing.render`).
 
 ### 9. Clean up timers and effects explicitly
 
-`useInterval` cleans up its timer automatically on unmount. For manual
-`useEffect` timers, return the cleanup function.
+`useInterval` and `useTimeout` clean up their timers automatically on unmount
+and when `delay` changes. For manual `useEffect` timers, return the cleanup
+function.
 
 ```lua
 useEffect(function()
@@ -268,6 +290,7 @@ end, {})
 | Calling `ui.mount()` inside a component | Creates infinite window recursion | Call `ui.mount` at the top level of your plugin command |
 | Reusing a `Segment` object across renders | Segments carry auto-incrementing IDs; sharing IDs corrupts focus tracking | Create a fresh `Segment:new(...)` each render |
 | Returning `nil` or a bare string | The reconciler expects `FiberNode[]` | Wrap strings in `Paragraph` or `Segment:wrap()` |
+| Reading `ui.components.Tree/Box/Checkbox` | Only `Paragraph`, `Button`, `Input`, `Select`, `Slider` are on `ui.components` | `require("ascii-ui.components.tree")` (also `box`, `checkbox`) |
 
 ---
 
@@ -276,3 +299,23 @@ end, {})
 - [components.md](components.md) — built-in component props and examples
 - [hooks.md](hooks.md) — hook signatures, return values, and gotchas
 - [patterns.md](patterns.md) — full recipes for common UI patterns
+
+---
+
+## Sync Status
+
+This skill mirrors `ascii-ui/ascii-ui.nvim`. It was last synced at commit
+`a88bbb0` (2026-08-14) — recorded in `metadata.source_commit` in the
+frontmatter above.
+
+To update this skill, diff the upstream source since that commit and revise
+the reference files:
+
+```sh
+cd path/to/ascii-ui.nvim
+git fetch origin
+git log --oneline a88bbb0..HEAD -- lua/ascii-ui docs/ README.md
+git diff a88bbb0..HEAD -- lua/ascii-ui/init.lua lua/ascii-ui/components lua/ascii-ui/hooks
+```
+
+After editing, bump `metadata.source_commit` and `metadata.skill_synced`.

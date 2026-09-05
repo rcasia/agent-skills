@@ -3,15 +3,17 @@
 Hooks are called inside the body of a component function registered with
 `ui.createComponent`. They must always be called **unconditionally** and
 **in the same order** on every render — the same rule as React hooks.
+State is **per component instance**: two mounts of the same component get
+independent hook slots.
 
 ```lua
 local ui          = require("ascii-ui")
 local useState    = ui.hooks.useState
 local useEffect   = ui.hooks.useEffect
 local useReducer  = ui.hooks.useReducer
+local useConfig   = ui.hooks.useConfig
 local useInterval = ui.hooks.useInterval
 local useTimeout  = ui.hooks.useTimeout
-local useConfig   = ui.hooks.useConfig
 ```
 
 ---
@@ -43,6 +45,9 @@ setCount(count + 1)
 -- functional update (safe inside closures — avoids stale captures)
 setCount(function(prev) return prev + 1 end)
 ```
+
+Works with any Lua type, including `nil` (a nil state is preserved across
+re-renders; it is not reset to the initial value).
 
 ### Gotchas
 
@@ -108,7 +113,8 @@ end)
 ### Cleanup
 
 Return a function to clean up resources. Called before the next run and on
-unmount.
+unmount. Effect-spawned timers are also torn down on unmount automatically
+by the fiber.
 
 ```lua
 useEffect(function()
@@ -177,6 +183,21 @@ new table (do not mutate `s`).
 
 ---
 
+## useConfig
+
+Returns the user-supplied configuration table (the `opts` table from
+`lazy.nvim` or `ui.setup(opts)`) as a **deep copy**. Useful for reading user
+preferences (border characters, keymaps, log level) inside a component
+without passing config down as props.
+
+```lua
+local config = useConfig()
+local horizontal = config.characters.horizontal
+local select_key = config.keymaps.select
+```
+
+---
+
 ## useInterval
 
 Runs `callback` repeatedly every `delay` milliseconds. The timer starts after
@@ -211,9 +232,8 @@ end, running and 500 or nil)
 
 **Callback is a closure over the render-time scope.** If you read state
 inside the callback, the value is captured at the time `useInterval` was
-first called (when `delay` was first set). To always read the latest value,
-use the functional setter form or combine with a `useEffect` that tracks the
-value explicitly.
+called (renewed only when `delay` changes). To always read the latest value,
+use the functional setter form.
 
 ```lua
 -- WRONG: `count` is stale inside the interval
@@ -236,34 +256,35 @@ Runs `callback` once after `delay` milliseconds. Cleaned up on unmount.
 
 ```lua
 ---@param callback fun()
----@param delay number | nil  milliseconds; nil disables
+---@param delay number | nil  milliseconds; nil or < 0 disables the timeout
 useTimeout(callback, delay)
 ```
 
-```lua
--- show a success message, then hide it after 2 seconds
-local visible, setVisible = useState(false)
+Key semantics (differs from `useInterval`):
 
-local function showMessage()
-  setVisible(true)
-end
+- The **latest** callback is always invoked — it is stored in a per-instance
+  ref, so closures do not go stale.
+- The timer **only restarts when `delay` changes**, not on every re-render.
+  Set `delay` to `nil` to cancel, then to a number to re-arm.
+
+```lua
+-- auto-dismiss a notification after 5s (dismiss = nil disables)
+local visible, setVisible = useState(true)
 
 useTimeout(function()
   setVisible(false)
-end, visible and 2000 or nil)
+end, visible and 5000 or nil)
 ```
 
----
-
-## useConfig
-
-Returns the user-supplied configuration table (the `opts` table from
-`lazy.nvim` or `ui.setup(opts)`). Useful for reading user preferences inside
-a component without passing config down as props.
-
 ```lua
-local config = useConfig()
--- config is the table the user passed to setup()
+-- "Loading... → Welcome!" reveal
+local ready, setReady = useState(false)
+
+useTimeout(function()
+  setReady(true)
+end, 3000)
+
+return { Paragraph({ content = ready and "Welcome!" or "Loading..." }) }
 ```
 
 ---
@@ -276,6 +297,6 @@ local config = useConfig()
 [ ] Called in the same order on every render
 [ ] No vim.api calls directly in the render body — wrap them in useEffect
 [ ] Deps arrays contain primitives, not table literals
-[ ] Interval/timeout callbacks use functional setters for state reads
+[ ] Interval callbacks use functional setters for state reads
 [ ] Effects that allocate resources return a cleanup function
 ```

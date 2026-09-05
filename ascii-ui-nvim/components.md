@@ -1,16 +1,31 @@
 # ascii-ui Component Reference
 
-All built-in components live on `ui.components`. Most accept a single props
-table. Components are focusable / interactive unless noted otherwise.
+## Where components live
+
+`ui.components` exposes the five most common components:
 
 ```lua
 local ui        = require("ascii-ui")
 local Paragraph = ui.components.Paragraph
 local Button    = ui.components.Button
-local Select    = ui.components.Select
-local Checkbox  = ui.components.Checkbox
 local Input     = ui.components.Input
+local Select    = ui.components.Select
 local Slider    = ui.components.Slider
+```
+
+`Tree`, `Box`, and `Checkbox` are built-in but must be required directly:
+
+```lua
+local Tree     = require("ascii-ui.components.tree")
+local Box      = require("ascii-ui.components.box")
+local Checkbox = require("ascii-ui.components.checkbox")
+```
+
+Layout primitives live on `ui.layout`:
+
+```lua
+local Row    = ui.layout.Row
+local Column = ui.layout.Column
 ```
 
 ---
@@ -35,7 +50,8 @@ Paragraph({ content = "Line one\nLine two" })
 
 ## Button
 
-Clickable, focusable label. Triggers `on_press` on `<CR>` or mouse click.
+Clickable, focusable label. Triggers `on_press` on the select key (`<CR>`
+by default) or mouse click.
 
 ```lua
 Button({
@@ -55,12 +71,54 @@ to avoid stale values.
 
 ---
 
+## Input
+
+Single-line editable text field. Supports **controlled** and **uncontrolled**
+modes. Enter insert mode over it with `i`; `<CR>` submits; leaving insert
+mode blurs.
+
+```lua
+local text, setText = useState("")
+
+-- Controlled (parent owns the value)
+Input({
+  value       = text,
+  placeholder = "Type something...",
+  on_change   = setText,
+  on_submit   = function(v) print("submitted: " .. v) end,
+})
+
+-- Uncontrolled (Input owns its state)
+Input({
+  initial_value = "prefill",
+  on_change     = function(v) print("changed: " .. v) end,
+  on_blur       = function(v) save(v) end,
+})
+```
+
+| Prop | Type | Required | Notes |
+|---|---|---|---|
+| `value` | `string?` | no | Controlled value; syncs when it changes |
+| `initial_value` | `string?` | no | Seed for uncontrolled mode |
+| `placeholder` | `string?` | no | Shown when empty (dimmed as content) |
+| `on_change` | `fun(value: string)` | no | Fires on every text change |
+| `on_submit` | `fun(value: string)` | no | Fires on `<CR>` in insert mode |
+| `on_blur` | `fun(value: string)` | no | Fires when insert mode exits |
+| `password` | `boolean?` | no | `true` masks text with `*` |
+
+**Controlled vs uncontrolled:** pass `value` to drive it from parent state
+(use `on_change` to sync back); pass `initial_value` and let the Input own
+its state for simple forms.
+
+---
+
 ## Select
 
 Keyboard-navigable options list. Calls `on_select` with the chosen item.
 
 ```lua
 Select({
+  title     = "Choose a fruit:",
   options   = { "Apple", "Banana", "Cherry" },
   on_select = function(item) print("picked: " .. item) end,
 })
@@ -69,15 +127,44 @@ Select({
 | Prop | Type | Required | Notes |
 |---|---|---|---|
 | `options` | `string[]` | yes | List of option labels |
+| `title` | `string?` | no | Rendered as the first line |
 | `on_select` | `fun(item: string)` | no | Called when user confirms |
 
-**Navigation:** `j`/`k` or arrow keys move the cursor; `<CR>` confirms.
+**Behavior:** options render as `[x]` (selected) / `[ ]`; navigate with
+hjkl/arrows, confirm with `<CR>`. First option is selected by default.
+Options are snapshotted at mount — changing `options` later does not
+re-render the list (TODO upstream).
+
+---
+
+## Slider
+
+Horizontal 0–100 range control, steps of 10. Draggable with mouse; moves
+with arrow keys (`CURSOR_MOVE_LEFT/RIGHT` interactions) once focused.
+
+```lua
+local volume, setVolume = useState(50)
+
+Slider({
+  title     = "Volume",
+  value     = volume,
+  on_change = setVolume,
+})
+```
+
+| Prop | Type | Required | Notes |
+|---|---|---|---|
+| `title` | `string?` | no | Rendered above the slider |
+| `value` | `number?` | no | 0–100, default `0` |
+| `on_change` | `fun(value: number)` | no | Called as the slider moves |
+
+Visual: `────●───── 50%`.
 
 ---
 
 ## Checkbox
 
-Toggle with an optional label. Renders `[x]` when active, `[ ]` when not.
+Toggle display. Renders `[x]` when active, `[ ]` when not.
 
 ```lua
 local checked, setChecked = useState(false)
@@ -96,47 +183,111 @@ Checkbox({
 
 **Note:** `Checkbox` is a display component — it does not own its state.
 Drive `active` from a `useState` in the parent and toggle it with a `Button`
-or mouse click on the checkbox itself.
+or a custom `Segment` interaction.
 
 ---
 
-## Input
+## Tree
 
-Single-line editable text field. Calls `on_change` on every keystroke.
+Recursive, collapsible tree view. Children may be plain `TreeNode` tables
+**or** already-constructed components (`FiberNode`s are rendered in place).
 
 ```lua
-local text, setText = useState("")
+local Tree = require("ascii-ui.components.tree")
 
-Input({
-  value     = text,
-  on_change = setText,
+Tree({
+  tree = {
+    text = "./",
+    expanded = true,
+    children = {
+      { text = "src", expanded = false, children = { { text = "main.lua" } } },
+      { text = "README.md" },
+    },
+  },
 })
 ```
 
 | Prop | Type | Required | Notes |
 |---|---|---|---|
-| `value` | `string` | no | Current text content |
-| `on_change` | `fun(value: string)` | no | Called on every character change |
+| `tree` | `TreeNode` | yes | Root node |
+
+| TreeNode field | Type | Notes |
+|---|---|---|
+| `text` | `string` | Label for this node |
+| `children` | `TreeNode[] \| FiberNode[]?` | Absent/empty = leaf node |
+| `expanded` | `boolean?` | Default `true`; `▸` collapsed, `▾` expanded |
+
+**Behavior:** click or `<CR>` on a node toggles expand/collapse; branches
+draw `├─` / `│` / `╰─` connectors. A child entry that is a component call
+(e.g. `Button({ label = "add" })`) is rendered inline at that position —
+useful for file explorers with actions.
 
 ---
 
-## Slider
+## Box
 
-Horizontal 0–100 range control. Draggable with mouse; `h`/`l` with keyboard.
+Rounded box with centered text. Borders use `config.characters`.
 
 ```lua
-local volume, setVolume = useState(50)
+local Box = require("ascii-ui.components.box")
 
-Slider({
-  value     = volume,
-  on_change = setVolume,
-})
+Box({ width = 20, height = 5, content = "Hello!" })
+-- ╭──────────────────╮
+-- │                  │
+-- │      Hello!      │
+-- │                  │
+-- ╰──────────────────╯
 ```
 
 | Prop | Type | Required | Notes |
 |---|---|---|---|
-| `value` | `number` | no | 0–100, default `0` |
-| `on_change` | `fun(value: number)` | no | Called as the slider moves |
+| `width` | `integer?` | no | Total width incl. borders, default `15` |
+| `height` | `integer?` | no | Total height incl. borders, default `3` |
+| `content` | `string?` | no | Centered text, default `""` |
+
+---
+
+## Layout — Row and Column
+
+`Row` arranges children horizontally; `Column` stacks them vertically.
+Both accept varargs or a props table with `gap`.
+
+```lua
+local Row    = ui.layout.Row
+local Column = ui.layout.Column
+
+-- varargs
+Row(Button({ label = "OK" }), Button({ label = "Cancel" }))
+
+-- props table with spacing
+Row({
+  children = {
+    Paragraph({ content = "Name:" }),
+    Input({ placeholder = "Enter name..." }),
+  },
+  gap = 2,
+})
+```
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `children` | `FiberNode[]` | `{}` | Child nodes to arrange |
+| `gap` | `integer?` | `0` | Spaces (Row) or blank lines (Column) between children |
+
+Rows are top-aligned, columns left-aligned. Nest freely for sidebar/main or
+dashboard layouts; combine with `ui.map` for dynamic child lists.
+
+---
+
+## Keyboard model (floating window)
+
+- Move focus with standard cursor keys: `h`/`j`/`k`/`l`, arrows
+- `<CR>` — select/activate the focused segment (configurable)
+- `i` — enter insert mode on input-able segments
+- `q` — quit/close the window (configurable)
+- Mouse: click to focus/select, `<LeftDrag>` moves the window
+
+Defaults come from `ui.setup({ keymaps = { quit = "q", select = "<CR>" } })`.
 
 ---
 
@@ -153,11 +304,14 @@ local Segment = require("ascii-ui.buffer.segment")
 -- plain text
 Segment:new({ content = "hello" })
 
--- hex foreground color
-Segment:new({ content = "●", color = { fg = "#ff6b6b" } })
+-- hex color shorthand (foreground)
+Segment:new({ content = "●", color = "#ff6b6b" })
 
--- hex background
+-- fg + bg table
 Segment:new({ content = " OK ", color = { fg = "#000000", bg = "#4caf50" } })
+
+-- Color instance (see Color API below)
+Segment:new({ content = "✨", color = ui.Color.from_hsl(280, 70, 60) })
 
 -- theme highlight group
 Segment:new({ content = "warning", highlight = "WarningMsg" })
@@ -176,12 +330,16 @@ Segment:new({
 | Field | Type | Notes |
 |---|---|---|
 | `content` | `string` | No newlines allowed |
-| `color` | `{ fg?: string, bg?: string }` | Hex strings e.g. `"#rrggbb"` |
+| `color` | `string \| {fg?, bg?} \| Color` | Truecolor; hex e.g. `"#ff0000"` |
 | `highlight` | `string` | Neovim highlight group name |
 | `is_focusable` | `boolean` | Keyboard-focusable when `true` |
 | `interactions` | `table` | Map of `interaction_type` → `fun()` |
 
 `color` and `highlight` are mutually exclusive per segment — use one or the other.
+
+Available interaction types (`require("ascii-ui.interaction_type")`):
+`SELECT`, `HOVER`, `CURSOR_MOVE_LEFT`, `CURSOR_MOVE_RIGHT`,
+`CURSOR_MOVE_UP`, `CURSOR_MOVE_DOWN`, `INPUT`.
 
 ### BufferLine
 
@@ -193,12 +351,32 @@ local BufferLine = require("ascii-ui.buffer.bufferline")
 -- from one or more segments
 BufferLine.new(
   Segment:new({ content = "Name: " }),
-  Segment:new({ content = "Alice", color = { fg = "#4ecdc4" } })
+  Segment:new({ content = "Alice", color = "#4ecdc4" })
 )
 
 -- shorthand when you have a single segment
 Segment:new({ content = "Hello" }):wrap()
 ```
+
+`ui.blocks` offers constructor shortcuts for both: `ui.blocks.Segment(opts)`
+and `ui.blocks.Bufferline(...)`.
+
+### Color API
+
+`ui.Color` unifies hex strings, `{fg, bg}` tables, and HSL:
+
+```lua
+local red    = ui.Color.new("#ff0000")               -- fg from hex string
+local styled = ui.Color.new({ fg = "#ffffff", bg = "#333333" })
+local hsl    = ui.Color.from_hsl(174, 72, 56)        -- h 0-360, s/l 0-100
+
+hsl:lighten(0.1)   -- also :darken, :saturate, :desaturate, :complement
+hsl:to_hsl()       -- round-trip back to h, s, l
+```
+
+Pass a `Color` (or raw hex/table) anywhere a segment accepts `color`.
+Methods `:to_ansi()` and `:to_highlight_group()` are used internally by the
+stdout viewport and the window renderer.
 
 ### `ui.map` — safe list rendering
 
@@ -231,6 +409,25 @@ end, {
 -- use it like any built-in:
 MyWidget({ title = "Hello" })
 ```
+
+Supported forms:
+
+```lua
+-- named (recommended) + flat prop types
+ui.createComponent("Name", fn, { title = "string" })
+
+-- anonymous (name defaults to "anonymous")
+ui.createComponent(fn)
+
+-- extended format — prop types + layout
+ui.createComponent("Name", fn, {
+  props  = { text = "string" },
+  layout = { direction = "row" },
+})
+```
+
+Valid prop type strings: `"string"`, `"number"`, `"boolean"`, `"function"`,
+`"table"`, `"nil"`. Invalid props raise an error at call time.
 
 The name string must be unique across the plugin — it is used as the fiber
 node type for reconciliation. Duplicate names produce a log error and the
