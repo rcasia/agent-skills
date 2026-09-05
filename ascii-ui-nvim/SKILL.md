@@ -74,9 +74,10 @@ Five rules come before any implementation decision:
    in that time, simplify it: shorten the render body, flatten the
    conditionals, and extract what doesn't belong.
 
-5. **Prefer composition over specialization.** Don't grow a component with
-   flag props (`show_header`, `variant = "compact"`) that branch into
-   different behaviors. Build small components and combine them —
+5. **Prefer composition over specialization.** Combine simpler pieces
+   instead of creating complex variants. Don't grow a component with flag
+   props (`show_header`, `variant = "compact"`) that branch into different
+   behaviors; build small components and put them together —
    `Row`/`Column` for arrangement, `Tree` children for embedded nodes,
    children props for slots. A new use case should mean a new combination,
    not a new prop.
