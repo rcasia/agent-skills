@@ -51,7 +51,7 @@ Hooks (`useState`, `useEffect`, …) are called inside the component body
 
 ## Design Principles
 
-Three rules come before any implementation decision:
+Five rules come before any implementation decision:
 
 1. **Simplicity is the top priority.** When choosing between alternatives,
    pick the one with the lowest cognitive complexity for a person reading
@@ -68,6 +68,18 @@ Three rules come before any implementation decision:
    describe intent (`value`, `label`, `on_change`) over callbacks that
    dictate mechanics; hide rendering, timing, and cleanup details inside
    the component.
+
+4. **A component must be understandable in under two minutes.** If a
+   first-time reader cannot grasp what it renders and when it re-renders
+   in that time, simplify it: shorten the render body, flatten the
+   conditionals, and extract what doesn't belong.
+
+5. **Prefer composition over specialization.** Don't grow a component with
+   flag props (`show_header`, `variant = "compact"`) that branch into
+   different behaviors. Build small components and combine them —
+   `Row`/`Column` for arrangement, `Tree` children for embedded nodes,
+   children props for slots. A new use case should mean a new combination,
+   not a new prop.
 
 ---
 
