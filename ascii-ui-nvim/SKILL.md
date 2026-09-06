@@ -11,7 +11,7 @@ metadata:
   source_repo: https://github.com/ascii-ui/ascii-ui.nvim
   source_commit: a88bbb033eeb70e058454797cb96ddf6f15aa611
   source_commit_date: "2026-08-14"
-  skill_synced: "2026-09-05"
+  skill_synced: "2026-09-06"
 ---
 
 # ascii-ui.nvim
@@ -278,6 +278,45 @@ useEffect(function()
 end, {})
 ```
 
+**10. Repeated elements are components.** When a row, card, or entry
+renders more than once — list items, table rows, overlay entries — declare
+a module-level component for one item and map over it, the same idiom as
+`items.map(i => <RunRow item={i} onOpen={open} />)` in React:
+
+```lua
+-- one item, one component, defined at module level
+local RunRow = ui.createComponent("RunRow", function(props)
+  local row = props.row -- status/glyph fields come from the logic layer
+  return {
+    BufferLine.new(
+      Segment:new({ content = " " .. row.glyph, highlight = row.highlight }),
+      Segment:new({
+        content = " " .. row.name,
+        is_focusable = true,
+        interactions = { [SELECT] = function() props.on_open(props.index) end },
+      })
+    ),
+  }
+end, { row = "table", index = "number", on_open = "function" })
+
+-- the list component maps it:
+return {
+  ui.map(props.rows, function(row, index)
+    return RunRow({ row = row, index = index, on_open = props.on_open })
+  end),
+}
+```
+
+The reconciler matches siblings by type + position and deep-compares
+props, **excluding functions** (`fiber.lua` `is_same` →
+`utils/props_are_equal`): rows whose data props are unchanged skip
+re-rendering even though handler closures are fresh every render —
+React's `memo` without opting in. There is no `key` prop, so keep list
+order stable (inserts/appends reconcile cleanly; reordering re-renders
+the moved range). Plain line-builder functions returning a `BufferLine`
+are fine for one-off static rows; anything *repeated* should be a
+component (see pattern 2 in [patterns.md](patterns.md)).
+
 ### Anti-patterns
 
 | Anti-pattern | Why it breaks | Fix |
@@ -288,6 +327,7 @@ end, {})
 | Defining a component inside another | A new component type is registered on every render, leaking memory | Define components at module level |
 | Calling `ui.mount()` inside a component | Creates infinite window recursion | Call `ui.mount` at the top level of your plugin command |
 | Reusing a `Segment` object across renders | Segments carry auto-incrementing IDs; sharing IDs corrupts focus tracking | Create a fresh `Segment:new(...)` each render |
+| Rendering repeated list items with plain line-builder functions | No props diffing — every item rebuilds on any state change | Declare a module-level row component and `ui.map` it (coding rule 10) |
 | Returning `nil` or a bare string | The reconciler expects `FiberNode[]` | Wrap strings in `Paragraph` or `Segment:wrap()` |
 | Reading `ui.components.Tree/Box/Checkbox` | Only `Paragraph`, `Button`, `Input`, `Select`, `Slider` are on `ui.components` | `require("ascii-ui.components.tree")` (also `box`, `checkbox`) |
 
@@ -305,8 +345,9 @@ The order to do things in, for any feature or fix:
    (Coding rule 8; pattern 8 in patterns.md.)
 
 3. **Pick building blocks.** Built-in components before custom ones;
-   `Row`/`Column` for arrangement; raw `Segment`/`BufferLine` only when
-   nothing fits. Check components.md for the exact props.
+   `Row`/`Column` for arrangement; a module-level component for every
+   *repeated* element (coding rule 10); raw `Segment`/`BufferLine` only for
+   one-off rows where nothing fits. Check components.md for the exact props.
 
 4. **Decide state ownership.** One owner per value. Shared state lives in
    the parent; coupled transitions go in a single `useReducer`.
@@ -348,6 +389,8 @@ you back to the workflow step that owns it.
 - [ ] Closures that read state use the functional setter?
 - [ ] Every effect that allocates a resource returns a cleanup?
 - [ ] Fresh `Segment` instances each render (none shared across renders)?
+- [ ] Every repeated list element a module-level component mapped with
+      `ui.map` (rule 10), not a bare builder?
 
 **Robustness (rule 7):**
 - [ ] Failures raise with a clear message — no bare `pcall` swallowing

@@ -294,7 +294,9 @@ Defaults come from `ui.setup({ keymaps = { quit = "q", select = "<CR>" } })`.
 ## Low-level blocks — Segment and BufferLine
 
 Use these when no built-in component fits, or when you need precise control
-over color and layout within a single row.
+over color and layout within a single row. When such rows are *repeated*
+(list items, table rows), wrap them in a module-level component and render
+with `ui.map` so unchanged items skip re-rendering — see pattern 2.
 
 ### Segment
 

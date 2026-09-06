@@ -78,6 +78,68 @@ return {
 }
 ```
 
+### Repeated items are components (the React idiom)
+
+In React you don't inline the item markup inside the map — you declare an
+item component and reuse it. Do the same here:
+
+```jsx
+// React                                  // ascii-ui
+{runs.map((run, i) =>                     ui.map(props.runs, function(run, i)
+  <RunRow                                return RunRow({ run = run, index = i,
+    key={run.id}                              on_open = props.on_open })
+    run={run}                           end)
+    onOpen={open}
+  />
+)}
+```
+
+One row, one component — even when the row is a single `BufferLine` of
+hand-built segments (a component may return `{ BufferLine.new(...) }`):
+
+```lua
+local RunRow = ui.createComponent("RunRow", function(props)
+  return {
+    BufferLine.new(
+      Segment:new({ content = " " .. props.run.glyph, highlight = props.run.highlight }),
+      Segment:new({
+        content = " " .. props.run.name,
+        is_focusable = true,
+        interactions = { [SELECT] = function() props.on_open(props.index) end },
+      })
+    ),
+  }
+end, { run = "table", index = "number", on_open = "function" })
+```
+
+Why components instead of a plain builder function returning a `BufferLine`:
+
+- The reconciler deep-compares props and **excludes functions**
+  (`fiber.lua` `is_same` → `utils/props_are_equal`). Rows whose data is
+  unchanged skip re-rendering even though the `on_open` closure is brand
+  new this render — `React.memo` behavior without opting in.
+- Per-item props (`run`, `index`) are declarative; the parent maps, the
+  child knows only its row.
+- The item stays testable and reusable in isolation (`testing.render`
+  the row with canned props).
+
+Caveats: ascii-ui has **no `key` prop** — siblings match by type and
+position, so keep list order stable (append/prepend is fine; a sort
+re-renders the moved range). A single *static* row (header, spacer) can
+still be a bare `BufferLine`; the rule is about *repeated* items.
+
+```lua
+-- WRONG: repeated markup inlined in the map
+ui.map(props.runs, function(run, i)
+  return BufferLine.new(Segment:new({ content = run.glyph }), <hand-rolled cells…>)
+end)
+
+-- RIGHT: a declared item component used repeatedly
+ui.map(props.runs, function(run, i)
+  return RunRow({ run = run, index = i, on_open = props.on_open })
+end)
+```
+
 ---
 
 ## Pattern 3 — Conditional rendering
@@ -527,6 +589,7 @@ Load/mount errors surface as notifications instead of crashing the session.
 | Theme-aware color | `Segment:new({ content = "...", highlight = "ErrorMsg" }):wrap()` |
 | Click handler | `Button({ label = "x", on_press = fn })` |
 | List of items | `ui.map(items, function(item) return ... end)` |
+| Repeated rows/cards | Module-level item component + `ui.map` (pattern 2) |
 | Side-by-side | `Row(child1, child2)` / `Row({ children = ..., gap = 2 })` |
 | Stacked | `Column(child1, child2)` |
 | Boxed panel | `require("ascii-ui.components.box")({ width = 20, content = "hi" })` |
